@@ -37,9 +37,9 @@ from bradford_white_connect_client.constants import BradfordWhiteConnectHeatingM
 _LOGGER = logging.getLogger(__name__)
 
 # The ``alarm`` property is expected to be a fixed-width string of this many
-# ``0`` / ``1`` characters. A different length or any other character means
-# the cloud sent something we don't understand, so we refuse to decode it
-# rather than inventing fault codes from garbage.
+# ``0`` / ``1`` characters. A different length is logged (firmware variants
+# may differ) but still decoded, so a genuine fault is never silently hidden;
+# only non-``0``/``1`` content is refused outright as garbage.
 EXPECTED_BITMAP_LENGTH = 40
 
 
@@ -95,27 +95,35 @@ def decode_alarm_bitmap(bitmap: str | None) -> list[dict[str, str | int]]:
     description are best-guess from the older RE2H50/80 manual. The
     list is empty if no bits are set or the input is empty/None.
 
-    Malformed input (non-string, characters other than ``0`` / ``1``, or a
-    length other than ``EXPECTED_BITMAP_LENGTH``) is refused: rather than
-    fabricating phantom high-numbered faults from a longer/garbled string we
-    log a warning once and return an empty list.
+    Non-``0``/``1`` content is refused (returns an empty list with a warning)
+    because it can't be a meaningful bitmap. A length other than
+    ``EXPECTED_BITMAP_LENGTH`` is logged but still decoded: rejecting the whole
+    payload on an unexpected width risks hiding a genuine active fault if a
+    firmware variant uses a different bitmap size, which is worse than the
+    original phantom-fault concern (set bits beyond the known table are
+    surfaced as ``Unknown fault``, which is at least truthful that *something*
+    is asserted).
     """
     if not bitmap:
         return []
-    if not isinstance(bitmap, str) or any(char not in "01" for char in bitmap):
+    if not isinstance(bitmap, str):
+        _LOGGER.warning("Ignoring non-string alarm bitmap %r", bitmap)
+        return []
+    bitmap = bitmap.strip()
+    if not bitmap:
+        return []
+    if any(char not in "01" for char in bitmap):
         _LOGGER.warning(
-            "Ignoring malformed alarm bitmap %r (expected a string of 0/1)",
-            bitmap,
+            "Ignoring malformed alarm bitmap %r (expected only 0/1)", bitmap
         )
         return []
     if len(bitmap) != EXPECTED_BITMAP_LENGTH:
         _LOGGER.warning(
-            "Ignoring alarm bitmap of unexpected length %d (expected %d): %r",
+            "Alarm bitmap length %d != expected %d; decoding anyway: %r",
             len(bitmap),
             EXPECTED_BITMAP_LENGTH,
             bitmap,
         )
-        return []
     active: list[dict[str, str | int]] = []
     for index, char in enumerate(bitmap):
         if char != "1":

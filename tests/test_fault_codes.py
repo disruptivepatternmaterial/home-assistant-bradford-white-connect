@@ -68,11 +68,23 @@ def test_decode_alarm_bitmap_unknown_bit_uses_unknown_label() -> None:
     assert decoded[0]["tentative_description"] == "Unknown fault (F2)"
 
 
-def test_decode_alarm_bitmap_wrong_length_is_ignored() -> None:
-    # A too-short bitmap with a set bit must not decode into a phantom fault.
-    assert decode_alarm_bitmap("1" * 10) == []
-    # A too-long bitmap likewise.
-    assert decode_alarm_bitmap("1" + "0" * 40) == []
+def test_decode_alarm_bitmap_wrong_length_still_decodes() -> None:
+    # An unexpected length must NOT silently drop a real fault: a too-short
+    # bitmap with bit 0 set still reports F1 (decoded, with a log warning).
+    decoded = decode_alarm_bitmap("1" + "0" * 9)
+    assert [entry["bit"] for entry in decoded] == [0]
+    assert decoded[0]["tentative_code"] == "F1"
+    # A too-long bitmap also decodes; the extra set bit is surfaced as an
+    # unknown fault rather than being hidden.
+    decoded_long = decode_alarm_bitmap("1" + "0" * 40)
+    assert decoded_long[0]["bit"] == 0
+
+
+def test_decode_alarm_bitmap_strips_whitespace() -> None:
+    # Surrounding whitespace/newlines from the cloud payload are tolerated.
+    assert decode_alarm_bitmap("  " + "0" * 40 + "\n") == []
+    decoded = decode_alarm_bitmap("\t" + "1" + "0" * 39 + "  ")
+    assert [entry["bit"] for entry in decoded] == [0]
 
 
 def test_decode_alarm_bitmap_non_binary_chars_are_ignored() -> None:

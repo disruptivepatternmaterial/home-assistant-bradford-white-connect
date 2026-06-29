@@ -216,12 +216,20 @@ class BradfordWhiteConnectStatusCoordinator(DataUpdateCoordinator[dict[str, Devi
             try:
                 async with asyncio.timeout(REQUEST_TIMEOUT.total_seconds()):
                     properties = await self.client.get_device_properties(device)
+                # Build the property map inside the try so a malformed payload
+                # (or a timeout mid-parse) skips just this device rather than
+                # failing the whole account refresh.
+                device.properties = {
+                    p.property.name: p.property for p in properties
+                }
             except BradfordWhiteConnectAuthenticationError as err:
                 raise ConfigEntryAuthFailed from err
             except (
                 BradfordWhiteConnectUnknownException,
                 aiohttp.ClientError,
                 TimeoutError,
+                AttributeError,
+                TypeError,
             ) as err:
                 _LOGGER.warning(
                     "Failed to fetch properties for device %s: %s; "
@@ -230,7 +238,6 @@ class BradfordWhiteConnectStatusCoordinator(DataUpdateCoordinator[dict[str, Devi
                     err,
                 )
                 continue
-            device.properties = {p.property.name: p.property for p in properties}
             if not self._device_is_valid(device):
                 continue
             valid_devices[device.dsn] = device

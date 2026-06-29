@@ -5,6 +5,21 @@
 
 This custom component for Home Assistant adds support for managing your water heater via the Bradford White Connect platform.
 
+## Changes in 0.5.8
+
+Final hardening from a second multi-model review pass:
+
+- A skipped/unavailable device no longer risks an error when Home Assistant
+  reads the water heater's capabilities (temperature range, mode list): the
+  device accessor now falls back to the last-known-good snapshot, so the
+  entity reports cleanly and stops logging on every refresh.
+- Alarm bitmaps of an unexpected length are now decoded anyway (with a log
+  note) instead of being discarded, so a genuine fault from a firmware
+  variant is never silently hidden; only non-binary content is rejected, and
+  surrounding whitespace is tolerated.
+- A malformed per-device telemetry payload now skips just that device instead
+  of failing the whole account refresh.
+
 ## Changes in 0.5.7
 
 Follow-up hardening from a second review pass over the 0.5.6 fixes:
