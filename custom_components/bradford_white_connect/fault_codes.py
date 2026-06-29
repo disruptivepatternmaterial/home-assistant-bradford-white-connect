@@ -29,11 +29,18 @@ uses, so the bitmap-rendering logic lives next to the bitmap itself.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-from bradford_white_connect_client.constants import (
-    BradfordWhiteConnectHeatingModes,
-)
+from bradford_white_connect_client.constants import BradfordWhiteConnectHeatingModes
+
+_LOGGER = logging.getLogger(__name__)
+
+# The ``alarm`` property is expected to be a fixed-width string of this many
+# ``0`` / ``1`` characters. A different length or any other character means
+# the cloud sent something we don't understand, so we refuse to decode it
+# rather than inventing fault codes from garbage.
+EXPECTED_BITMAP_LENGTH = 40
 
 
 FAULT_CODES: dict[int, str] = {
@@ -87,17 +94,36 @@ def decode_alarm_bitmap(bitmap: str | None) -> list[dict[str, str | int]]:
     the ``bit`` index is reported as a hard fact; the code and
     description are best-guess from the older RE2H50/80 manual. The
     list is empty if no bits are set or the input is empty/None.
+
+    Malformed input (non-string, characters other than ``0`` / ``1``, or a
+    length other than ``EXPECTED_BITMAP_LENGTH``) is refused: rather than
+    fabricating phantom high-numbered faults from a longer/garbled string we
+    log a warning once and return an empty list.
     """
     if not bitmap:
+        return []
+    if not isinstance(bitmap, str) or any(char not in "01" for char in bitmap):
+        _LOGGER.warning(
+            "Ignoring malformed alarm bitmap %r (expected a string of 0/1)",
+            bitmap,
+        )
+        return []
+    if len(bitmap) != EXPECTED_BITMAP_LENGTH:
+        _LOGGER.warning(
+            "Ignoring alarm bitmap of unexpected length %d (expected %d): %r",
+            len(bitmap),
+            EXPECTED_BITMAP_LENGTH,
+            bitmap,
+        )
         return []
     active: list[dict[str, str | int]] = []
     for index, char in enumerate(bitmap):
         if char != "1":
             continue
         fault_number = index + 1
-        description = FAULT_CODES.get(
-            fault_number, f"Unknown fault (bit {index})"
-        )
+        # Keep the unknown label on the same 1-based F-number scheme as
+        # ``tentative_code`` so a reader never sees "F2 / Unknown fault (bit 1)".
+        description = FAULT_CODES.get(fault_number, f"Unknown fault (F{fault_number})")
         active.append(
             {
                 "bit": index,

@@ -63,7 +63,22 @@ def test_decode_alarm_bitmap_unknown_bit_uses_unknown_label() -> None:
     assert len(decoded) == 1
     assert decoded[0]["bit"] == 1
     assert decoded[0]["tentative_code"] == "F2"
-    assert decoded[0]["tentative_description"].startswith("Unknown fault")
+    # The unknown label uses the same 1-based F-number as the code, not the
+    # 0-based bit index, so the two never disagree.
+    assert decoded[0]["tentative_description"] == "Unknown fault (F2)"
+
+
+def test_decode_alarm_bitmap_wrong_length_is_ignored() -> None:
+    # A too-short bitmap with a set bit must not decode into a phantom fault.
+    assert decode_alarm_bitmap("1" * 10) == []
+    # A too-long bitmap likewise.
+    assert decode_alarm_bitmap("1" + "0" * 40) == []
+
+
+def test_decode_alarm_bitmap_non_binary_chars_are_ignored() -> None:
+    # Any character other than 0/1 means the cloud sent garbage.
+    assert decode_alarm_bitmap("x" * 40) == []
+    assert decode_alarm_bitmap("2" + "0" * 39) == []
 
 
 def test_heat_mode_to_name_none_returns_none() -> None:

@@ -96,7 +96,7 @@ def _async_cleanup_removed_buttons(hass: HomeAssistant, entry: ConfigEntry) -> N
     entity_reg = er.async_get(hass)
     entries = er.async_entries_for_config_entry(entity_reg, entry.entry_id)
     for entity in entries:
-        if entity.unique_id.endswith(REMOVED_BUTTON_SUFFIXES):
+        if entity.unique_id and entity.unique_id.endswith(REMOVED_BUTTON_SUFFIXES):
             entity_reg.async_remove(entity.entity_id)
 
 

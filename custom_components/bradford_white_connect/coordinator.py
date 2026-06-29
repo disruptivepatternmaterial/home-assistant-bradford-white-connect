@@ -101,7 +101,11 @@ class BradfordWhiteConnectStatusCoordinator(DataUpdateCoordinator[dict[str, Devi
         url = _DATAPOINT_URL.format(dsn=device.dsn, name=name)
         payload_value: Any = (1 if value else 0) if isinstance(value, bool) else value
         data = json.dumps({"datapoint": {"value": payload_value}})
-        _LOGGER.info("Writing %s=%r to device %s", name, payload_value, device.dsn)
+        # Deliberately log at DEBUG and without the value or DSN: some
+        # writable properties carry user content (e.g. ``heater_name``) and
+        # the DSN is a device serial, neither of which belongs in default
+        # logs.
+        _LOGGER.debug("Writing property %s", name)
         async with asyncio.timeout(REQUEST_TIMEOUT.total_seconds()):
             await self.client.http_post_request(url, headers=headers, data=data)
 
@@ -139,7 +143,14 @@ class BradfordWhiteConnectStatusCoordinator(DataUpdateCoordinator[dict[str, Devi
                 )
                 return False
             value = device_property.value
-            if value is None or value < 0 or value > 200:
+            # ``Property.value`` is typed ``Optional[str]`` upstream; coerce
+            # defensively so a stringified number doesn't raise ``TypeError``
+            # in the comparison and fail the whole refresh.
+            try:
+                numeric_value = float(value) if value is not None else None
+            except (TypeError, ValueError):
+                numeric_value = None
+            if numeric_value is None or numeric_value < 0 or numeric_value > 200:
                 _LOGGER.warning(
                     "Device %s property %s out of range: %r; skipping this update",
                     device.dsn,
@@ -167,21 +178,20 @@ class BradfordWhiteConnectStatusCoordinator(DataUpdateCoordinator[dict[str, Devi
         return True
 
     async def _async_update_data(self) -> dict[str, Device]:
-        """Fetch latest data from the device status endpoint."""
+        """Fetch latest data from the device status endpoint.
+
+        Each cloud call is bounded by its own ``REQUEST_TIMEOUT`` so one slow
+        device can't starve the rest of the account's refresh budget, and a
+        per-device fetch failure is logged and skipped rather than failing
+        every entity. If devices exist but none yield usable telemetry this
+        cycle, the refresh is treated as a (recoverable) failure so entities
+        go unavailable and ``async_config_entry_first_refresh`` raises
+        ``ConfigEntryNotReady`` instead of silently setting up zero entities.
+        """
         self._refresh_update_interval()
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT.total_seconds()):
                 devices = await self.client.get_devices()
-                valid_devices: dict[str, Device] = {}
-                for device in devices:
-                    properties = await self.client.get_device_properties(device)
-                    device.properties = {
-                        p.property.name: p.property for p in properties
-                    }
-                    if not self._device_is_valid(device):
-                        continue
-                    valid_devices[device.dsn] = device
-                return valid_devices
         except BradfordWhiteConnectAuthenticationError as err:
             raise ConfigEntryAuthFailed from err
         except (
@@ -190,6 +200,34 @@ class BradfordWhiteConnectStatusCoordinator(DataUpdateCoordinator[dict[str, Devi
             TimeoutError,
         ) as err:
             raise UpdateFailed(f"Error communicating with API: {err}") from err
+
+        valid_devices: dict[str, Device] = {}
+        for device in devices:
+            try:
+                async with asyncio.timeout(REQUEST_TIMEOUT.total_seconds()):
+                    properties = await self.client.get_device_properties(device)
+            except BradfordWhiteConnectAuthenticationError as err:
+                raise ConfigEntryAuthFailed from err
+            except (
+                BradfordWhiteConnectUnknownException,
+                aiohttp.ClientError,
+                TimeoutError,
+            ) as err:
+                _LOGGER.warning(
+                    "Failed to fetch properties for device %s: %s; "
+                    "skipping this update",
+                    device.dsn,
+                    err,
+                )
+                continue
+            device.properties = {p.property.name: p.property for p in properties}
+            if not self._device_is_valid(device):
+                continue
+            valid_devices[device.dsn] = device
+
+        if devices and not valid_devices:
+            raise UpdateFailed("No devices returned usable telemetry this cycle")
+        return valid_devices
 
 
 class BradfordWhiteConnectEnergyCoordinator(
@@ -220,22 +258,6 @@ class BradfordWhiteConnectEnergyCoordinator(
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT.total_seconds()):
                 devices = await self.client.get_devices()
-
-                for device in devices:
-                    heatpump_energy = await self.client.get_total_energy_usage_for_day(
-                        device, "hp", usage_date
-                    )
-                    resistance_energy = (
-                        await self.client.get_total_energy_usage_for_day(
-                            device, "re", usage_date
-                        )
-                    )
-
-                    energy_usage_by_dsn[device.dsn] = {
-                        ENERGY_TYPE_HEAT_PUMP: heatpump_energy,
-                        ENERGY_TYPE_RESISTANCE: resistance_energy,
-                    }
-
         except BradfordWhiteConnectAuthenticationError as err:
             raise ConfigEntryAuthFailed from err
         except (
@@ -244,5 +266,36 @@ class BradfordWhiteConnectEnergyCoordinator(
             TimeoutError,
         ) as err:
             raise UpdateFailed(f"Error communicating with API: {err}") from err
+
+        for device in devices:
+            try:
+                async with asyncio.timeout(REQUEST_TIMEOUT.total_seconds()):
+                    heatpump_energy = await self.client.get_total_energy_usage_for_day(
+                        device, "hp", usage_date
+                    )
+                    resistance_energy = (
+                        await self.client.get_total_energy_usage_for_day(
+                            device, "re", usage_date
+                        )
+                    )
+            except BradfordWhiteConnectAuthenticationError as err:
+                raise ConfigEntryAuthFailed from err
+            except (
+                BradfordWhiteConnectUnknownException,
+                aiohttp.ClientError,
+                TimeoutError,
+            ) as err:
+                _LOGGER.warning(
+                    "Failed to fetch energy usage for device %s: %s; "
+                    "skipping this update",
+                    device.dsn,
+                    err,
+                )
+                continue
+
+            energy_usage_by_dsn[device.dsn] = {
+                ENERGY_TYPE_HEAT_PUMP: heatpump_energy,
+                ENERGY_TYPE_RESISTANCE: resistance_energy,
+            }
 
         return energy_usage_by_dsn

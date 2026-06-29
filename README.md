@@ -5,6 +5,31 @@
 
 This custom component for Home Assistant adds support for managing your water heater via the Bradford White Connect platform.
 
+## Changes in 0.5.6
+
+Robustness and correctness fixes from a code review of the 0.5.x changes:
+
+- **Skipped devices now go cleanly unavailable.** When a heater's telemetry
+  is missing or out of range for a refresh the integration skips it for that
+  cycle (so one bad heater doesn't take down a multi-heater account). Its
+  entities now correctly report **unavailable** instead of staying "available"
+  and logging errors on every update. If *no* device returns usable data on
+  the first refresh, setup now retries (via `ConfigEntryNotReady`) instead of
+  silently loading zero entities.
+- **One slow heater no longer fails the whole account.** Each cloud call has
+  its own timeout and a per-device fetch failure is logged and skipped, rather
+  than sharing a single 60-second budget across every device in the account.
+- **Mode selector consistency.** The water heater's current operation is now
+  always part of its operation list, so newer/unrecognised models no longer
+  show a current mode that isn't selectable, and exiting Away mode no longer
+  errors on unrecognised models.
+- **Alarm decoding hardened.** Malformed or wrong-length `alarm` bitmaps from
+  the cloud are ignored (with a log warning) instead of being decoded into
+  phantom fault codes, and the tentative fault labels use a consistent
+  `F<n>` numbering.
+- **Privacy.** Property writes (including the editable heater name) are now
+  logged at debug level without the value or device serial.
+
 ## Changes in 0.5.5
 
 The water heater entity now reports the **actual operating mode** the

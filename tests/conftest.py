@@ -9,11 +9,14 @@ as flat modules. We also install a minimal stub for the
 ``bradford_white_connect_client`` submodules they import, so the tests
 run with nothing more than ``pytest`` installed.
 
-In CI, ``pipenv install --dev`` will provide the real upstream client.
-The stub is registered into ``sys.modules`` before the real package is
-ever imported, so the stub wins for the duration of the test session;
-its surface is intentionally a superset of what the modules-under-test
-touch, so the test outcome is identical against either.
+The stub is installed **only when the real client is not importable**. In
+CI (``pipenv install --dev`` provides the real client) the real package is
+used, so the suite exercises the actual upstream contract — enum values,
+``Device`` / ``Property`` shape, ``is_valid`` — and would catch drift. The
+stub's enum values mirror the real
+``bradford_white_connect_client.constants.BradfordWhiteConnectHeatingModes``
+(``HYBRID = 0`` ... ``VACATION = 4``) so a stub-only run can't pass against
+fictitious integers.
 """
 
 from __future__ import annotations
@@ -24,8 +27,14 @@ from pathlib import Path
 
 
 def _install_upstream_client_stub() -> None:
-    if "bradford_white_connect_client" in sys.modules:
+    # Prefer the real client whenever it is importable (e.g. in CI) so the
+    # tests run against the genuine upstream contract rather than a stand-in.
+    try:
+        import bradford_white_connect_client  # noqa: F401
+
         return
+    except ImportError:
+        pass
 
     root = types.ModuleType("bradford_white_connect_client")
 
@@ -42,15 +51,16 @@ def _install_upstream_client_stub() -> None:
     constants_mod = types.ModuleType("bradford_white_connect_client.constants")
 
     class _BradfordWhiteConnectHeatingModes:
-        HYBRID = 1
-        ELECTRIC = 2
-        HEAT_PUMP = 3
-        HYBRID_PLUS = 4
-        VACATION = 5
+        # Must mirror the real upstream enum (constants.py): 0-based.
+        HYBRID = 0
+        ELECTRIC = 1
+        HEAT_PUMP = 2
+        HYBRID_PLUS = 3
+        VACATION = 4
 
         @staticmethod
         def is_valid(value: int) -> bool:
-            return value in (1, 2, 3, 4, 5)
+            return value in (0, 1, 2, 3, 4)
 
     constants_mod.BradfordWhiteConnectHeatingModes = _BradfordWhiteConnectHeatingModes
     root.constants = constants_mod

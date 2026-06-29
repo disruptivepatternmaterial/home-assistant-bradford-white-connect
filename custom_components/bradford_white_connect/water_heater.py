@@ -100,12 +100,24 @@ class BradfordWhiteConnectWaterHeaterEntity(
 
     @property
     def operation_list(self) -> list[str]:
-        """Return the list of supported operation modes."""
+        """Return the list of supported operation modes.
+
+        Home Assistant requires ``current_operation`` to be a member of
+        ``operation_list``. Because ``current_operation`` is derived from the
+        live ``current_heat_mode`` while this list is derived from the model's
+        published mode set, we always fold the current operation in so the
+        two can't disagree (this covers unknown/newer models whose mode set
+        isn't in the upstream helper, where the list would otherwise collapse
+        to ``[STATE_OFF]`` while the unit reports a real mode).
+        """
         ha_modes = [
             MODE_BRADFORDWHITE_TO_HA.get(mode)
             for mode in self._supported_vendor_modes()
             if MODE_BRADFORDWHITE_TO_HA.get(mode)
         ]
+        current = self.current_operation
+        if current and current not in ha_modes:
+            ha_modes.append(current)
         return ha_modes or [STATE_OFF]
 
     @property
@@ -214,8 +226,10 @@ class BradfordWhiteConnectWaterHeaterEntity(
         Picks the first entry from ``DEFAULT_OPERATION_MODE_PRIORITY`` that
         the appliance actually supports. If none of the preferred modes are
         in the supported list (or the list is empty because the model is
-        unknown), falls back to the first non-vacation mode the appliance
-        reports.
+        unknown/newer), falls back to the first non-vacation mode the
+        appliance reports, and finally to the top default-priority mode so a
+        user is never locked into away mode just because we don't recognise
+        the model.
         """
         supported_modes = [
             mode
@@ -228,11 +242,10 @@ class BradfordWhiteConnectWaterHeaterEntity(
             None,
         )
         if target_mode is None:
-            target_mode = supported_modes[0] if supported_modes else None
-
-        if target_mode is None:
-            raise HomeAssistantError(
-                "No supported non-vacation heating modes available to exit away mode"
+            target_mode = (
+                supported_modes[0]
+                if supported_modes
+                else DEFAULT_OPERATION_MODE_PRIORITY[0]
             )
 
         _LOGGER.info("Setting away mode off, switching to mode: %s", target_mode)

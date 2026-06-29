@@ -48,12 +48,21 @@ class BradfordWhiteConnectStatusEntity(
 ):
     """Base entity for entities that use data from the status coordinator.
 
-    Availability is inherited from ``CoordinatorEntity``: the entity is
-    available whenever the coordinator's most recent update succeeded.
+    Availability is gated on two things: the coordinator's most recent
+    update succeeded AND this device's DSN is present in the latest
+    coordinator data. The second clause matters because the coordinator
+    *skips* a device whose telemetry is missing/out of range for a cycle
+    (see ``_device_is_valid``); without this gate the entity would report
+    ``available`` while every ``self.device`` access raised ``KeyError``.
     The cloud-reported ``device.connection_status`` field is intentionally
     not used as an availability gate because it can report ``Offline`` for
     devices that are reachable; it is exposed as a diagnostic sensor instead.
     """
+
+    @property
+    def available(self) -> bool:
+        """Return True only when this device is present in the latest update."""
+        return super().available and self._dsn in self.coordinator.data
 
     @property
     def device(self) -> Device:
@@ -91,6 +100,11 @@ class BradfordWhiteConnectEnergyEntity(
     BradfordWhiteConnectEntity[BradfordWhiteConnectEnergyCoordinator]
 ):
     """Base entity for entities that use data from the energy coordinator."""
+
+    @property
+    def available(self) -> bool:
+        """Return True only when this device is present in the latest update."""
+        return super().available and self._dsn in self.coordinator.data
 
     @property
     def energy_usage(self) -> float:
