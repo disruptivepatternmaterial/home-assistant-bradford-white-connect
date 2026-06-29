@@ -2,11 +2,25 @@
 
 > Status (landed in 0.5.6): ACT-ON items A1–A8 done, plus the cheap
 > CONSIDER items "value coercion in `_device_is_valid`" and "`unique_id`
-> None guard". Verified: 18/18 unit tests pass; flake8/ruff/isort/black
-> clean on changed lines. Still open (deferred): writable-vs-readable
-> property verification (needs hardware), `_post_datapoint` non-JSON 200
-> handling, energy-coordinator naive `datetime` (pre-existing), and the
-> NOTED items below.
+> None guard".
+>
+> Status (landed in 0.5.7): second-pass review fixes — temp getters
+> float-coerced, `device`/`energy_usage` made KeyError-safe, `current_heat_mode`
+> int-coerced, energy coordinator all-invalid first-refresh guard,
+> `supported_features` derived from the vendor mode set (no flapping).
+>
+> Status (landed in 0.5.8): the second-pass CRITICAL (Opus C1 — water_heater
+> `capability_attributes`/`supported_features` are read unconditionally and hit
+> `self.device`) is resolved by the 0.5.7 cached-snapshot `device` fallback;
+> plus the bitmap decoder now decodes unexpected lengths instead of discarding
+> them (+ whitespace strip), and a malformed per-device payload skips only that
+> device.
+>
+> Still open (DEFERRED / queued): HA-harness entity+coordinator tests
+> (partial-skip water_heater regression test would have caught C1 — highest
+> priority follow-up), writable-vs-readable property verification (needs
+> hardware), `_post_datapoint` non-JSON 200 handling, a stub-vs-real enum
+> drift-guard test, and the energy-coordinator naive `datetime` (pre-existing).
 
 Synthesis of an adversarial multi-model code review of the recent fork arc
 (`e3bc966..HEAD`): write platforms (`button`/`number`/`switch`/`text`), the
