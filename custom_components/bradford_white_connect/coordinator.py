@@ -167,7 +167,17 @@ class BradfordWhiteConnectStatusCoordinator(DataUpdateCoordinator[dict[str, Devi
                 device.dsn,
             )
             return False
-        if not BradfordWhiteConnectHeatingModes.is_valid(heat_mode.value):
+        # ``Property.value`` is typed ``Optional[str]`` upstream while
+        # ``is_valid`` is strict integer membership, so coerce first to avoid
+        # skipping (and, with the all-invalid guard, failing) a device whose
+        # mode merely arrived as a numeric string.
+        try:
+            heat_mode_value = int(heat_mode.value)
+        except (TypeError, ValueError):
+            heat_mode_value = None
+        if heat_mode_value is None or not BradfordWhiteConnectHeatingModes.is_valid(
+            heat_mode_value
+        ):
             _LOGGER.warning(
                 "Device %s reported unknown current_heat_mode %r; skipping this update",
                 device.dsn,
@@ -298,4 +308,6 @@ class BradfordWhiteConnectEnergyCoordinator(
                 ENERGY_TYPE_RESISTANCE: resistance_energy,
             }
 
+        if devices and not energy_usage_by_dsn:
+            raise UpdateFailed("No devices returned usable energy data this cycle")
         return energy_usage_by_dsn

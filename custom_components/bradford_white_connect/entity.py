@@ -66,8 +66,15 @@ class BradfordWhiteConnectStatusEntity(
 
     @property
     def device(self) -> Device:
-        """Shortcut to get the device from the coordinator data."""
-        return self.coordinator.data[self._dsn]
+        """Return the device from the latest coordinator data.
+
+        Falls back to the snapshot captured at setup when this DSN is absent
+        from the current update (i.e. the device was skipped this cycle).
+        The entity is already reported ``unavailable`` in that case, so the
+        fallback only exists to keep state reads and write-service handlers
+        from raising ``KeyError`` instead of a clean unavailability/error.
+        """
+        return self.coordinator.data.get(self._dsn, self._device)
 
 
 class BradfordWhiteConnectDescribedStatusEntity(BradfordWhiteConnectStatusEntity):
@@ -107,6 +114,9 @@ class BradfordWhiteConnectEnergyEntity(
         return super().available and self._dsn in self.coordinator.data
 
     @property
-    def energy_usage(self) -> float:
-        """Shortcut to get the energy usage from the coordinator data."""
-        return self.coordinator.data[self._dsn][self._energy_type]
+    def energy_usage(self) -> float | None:
+        """Return this device's energy usage, or None if absent this cycle."""
+        device_usage = self.coordinator.data.get(self._dsn)
+        if device_usage is None:
+            return None
+        return device_usage.get(self._energy_type)

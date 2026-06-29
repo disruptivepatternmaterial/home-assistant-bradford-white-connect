@@ -53,6 +53,21 @@ DEFAULT_OPERATION_MODE_PRIORITY = [
 _LOGGER = logging.getLogger(__name__)
 
 
+def _to_float(value: Any) -> float | None:
+    """Coerce a device property value to float, or None if not numeric.
+
+    ``Property.value`` is typed ``Optional[str]`` upstream, so a numeric
+    reading can arrive as a string; Home Assistant requires a real ``float``
+    (or ``None``) for temperatures.
+    """
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -125,8 +140,11 @@ class BradfordWhiteConnectWaterHeaterEntity(
         """Return the list of supported features."""
         support_flags = WaterHeaterEntityFeature.TARGET_TEMPERATURE
 
-        # Operation mode only supported if there is more than one mode
-        if len(self.operation_list) > 1:
+        # Operation mode is supported only when the model exposes more than
+        # one vendor mode. This is derived from the (static) model mode set
+        # rather than ``operation_list`` so the feature flag doesn't flap as
+        # the live ``current_operation`` is folded into ``operation_list``.
+        if len(self._supported_vendor_modes()) > 1:
             support_flags |= WaterHeaterEntityFeature.OPERATION_MODE
 
         support_flags |= WaterHeaterEntityFeature.AWAY_MODE
@@ -137,25 +155,25 @@ class BradfordWhiteConnectWaterHeaterEntity(
     def current_temperature(self) -> float | None:
         """Return the current temperature."""
         tank_temp = self.device.properties.get("tank_temp")
-        return tank_temp.value if tank_temp else None
+        return _to_float(tank_temp.value) if tank_temp else None
 
     @property
     def target_temperature(self) -> float | None:
         """Return the temperature we try to reach."""
         water_setpoint_out = self.device.properties.get("water_setpoint_out")
-        return water_setpoint_out.value if water_setpoint_out else None
+        return _to_float(water_setpoint_out.value) if water_setpoint_out else None
 
     @property
-    def min_temp(self) -> float:
+    def min_temp(self) -> float | None:
         """Return the minimum temperature."""
         water_setpoint_min = self.device.properties.get("water_setpoint_min")
-        return water_setpoint_min.value if water_setpoint_min else None
+        return _to_float(water_setpoint_min.value) if water_setpoint_min else None
 
     @property
-    def max_temp(self) -> float:
+    def max_temp(self) -> float | None:
         """Return the maximum temperature."""
         water_setpoint_max = self.device.properties.get("water_setpoint_max")
-        return water_setpoint_max.value if water_setpoint_max else None
+        return _to_float(water_setpoint_max.value) if water_setpoint_max else None
 
     @property
     def current_operation(self) -> str:

@@ -5,6 +5,21 @@
 
 This custom component for Home Assistant adds support for managing your water heater via the Bradford White Connect platform.
 
+## Changes in 0.5.7
+
+Follow-up hardening from a second review pass over the 0.5.6 fixes:
+
+- Reading a temperature now always yields a number (or nothing) even if the
+  cloud reports it as a string, and a device that is skipped for a refresh no
+  longer risks raising an error on state reads or control actions.
+- The energy coordinator now retries on first setup if no device returns
+  usable data, matching the status coordinator.
+- A heat mode that arrives as a numeric string is accepted instead of making
+  the device look invalid.
+- The water heater's "supports mode selection" flag is now derived from the
+  model's mode set (stable) instead of the live operation list, so it no
+  longer flips on/off when the unit enters or leaves Vacation.
+
 ## Changes in 0.5.6
 
 Robustness and correctness fixes from a code review of the 0.5.x changes:
