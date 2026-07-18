@@ -14,12 +14,15 @@ from homeassistant.helpers import (
     entity_registry as er,
 )
 
+from .client_compat import apply_client_compat_patches
 from .const import DOMAIN
 from .coordinator import (
     BradfordWhiteConnectEnergyCoordinator,
     BradfordWhiteConnectStatusCoordinator,
 )
 from .helper import get_device_property_value
+
+apply_client_compat_patches()
 
 REMOVED_BUTTON_SUFFIXES: tuple[str, ...] = (
     "_clear_alarm_counts",

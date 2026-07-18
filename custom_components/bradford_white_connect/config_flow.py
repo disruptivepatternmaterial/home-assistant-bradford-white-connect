@@ -16,9 +16,12 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import aiohttp_client
 import voluptuous as vol
 
+from .client_compat import apply_client_compat_patches
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+apply_client_compat_patches()
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):

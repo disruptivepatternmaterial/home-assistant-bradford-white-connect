@@ -5,6 +5,25 @@
 
 This custom component for Home Assistant adds support for managing your water heater via the Bradford White Connect platform.
 
+> **NET fork** of [ablyler/home-assistant-bradford-white-connect](https://github.com/ablyler/home-assistant-bradford-white-connect).
+> Install this repository in HACS as a custom repository
+> (`disruptivepatternmaterial/home-assistant-bradford-white-connect`, category
+> Integration) to receive these releases.
+
+## Changes in 0.5.10
+
+Ayla's cloud API added fields the pinned
+`bradford-white-connect-client==0.0.21` does not model (`oem`,
+`transport_type` on devices; `passthrough` on properties). The client
+constructs dataclasses with ``Model(**payload)``, which raised
+``TypeError`` and failed setup.
+
+- New `client_compat` shim filters device/property payloads to known
+  dataclass fields before construction, so **future unknown Ayla keys are
+  ignored** instead of breaking the integration.
+- Novel keys are logged once at warning level.
+- Regression tests cover unknown-field payloads.
+
 ## Changes in 0.5.8
 
 Final hardening from a second multi-model review pass:
@@ -114,10 +133,16 @@ use the keypad Service Mode procedure instead:
 
 ### Using HACS
 
-The easiest way to install this integration is with [HACS][hacs]. First, [install HACS][hacs-download] if you don't have it yet.\
-Click on the link below or search for `Bradford White Connect` in HACS.\
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ablyler&repository=home-assistant-bradford-white-connect&category=integration)\
-Click download and after this, restart Home Assistant.
+The easiest way to install this integration is with [HACS][hacs]. First, [install HACS][hacs-download] if you don't have it yet.
+
+This NET fork is a **custom repository** (not the HACS default listing):
+
+1. HACS → ⋮ → Custom repositories
+2. Repository: `disruptivepatternmaterial/home-assistant-bradford-white-connect`
+3. Category: Integration
+4. Download **Bradford White Connect (NET fork)**, then restart Home Assistant
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=disruptivepatternmaterial&repository=home-assistant-bradford-white-connect&category=integration)
 
 ### Manual installation
 
@@ -300,5 +325,5 @@ Bradford White Connect and other names are trademarks of their respective owners
 [ha-logs-badge]: https://my.home-assistant.io/badges/logs.svg
 [ha-service]: https://my.home-assistant.io/redirect/developer_call_service/?service=logger.set_level
 [ha-service-badge]: https://my.home-assistant.io/badges/developer_call_service.svg
-[releases-shield]: https://img.shields.io/github/release/ablyler/home-assistant-bradford-white-connect.svg?style=flat
-[releases]: https://github.com/ablyler/home-assistant-bradford-white-connect/releases
+[releases-shield]: https://img.shields.io/github/release/disruptivepatternmaterial/home-assistant-bradford-white-connect.svg?style=flat
+[releases]: https://github.com/disruptivepatternmaterial/home-assistant-bradford-white-connect/releases
